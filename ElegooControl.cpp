@@ -1,4 +1,5 @@
 #include "SerialChecker.h"
+#include "MilliTimer.h"
 
 SerialChecker scpc(Serial);
 HardwareSerial s1(1);
@@ -17,12 +18,16 @@ void setup()
 
 void loop()
 {
- checkSerialPC();
- checkEndStop();
- printToLCD();
+//  checkSerialPC();
+//  checkEndStop();
+//  printToLCD();
+  runContinous();
 }
 
-void checkSerialPC()
+runContinuous()
 {
-
+  digitalWrite(13, HIGH);
+  delayMicroseconds(500);
+  digitalWrite(13, LOW);
+  delayMicroseconds(500);
 }

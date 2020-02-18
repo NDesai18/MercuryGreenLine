@@ -11,8 +11,9 @@ const int downstop_pin = 35;
 const int top_LED_pin = 32;
 const int bot_LED_pin = 33;
 
-int delaytime = 400;    //in microseconds
-const int mindelaytime = 400;
+int delaytime = 600;    //in microseconds
+int pulsetime = 250;    //in microseconds
+const int mindelaytime = 600;
 int steprate = 1/delaytime;
 const int maxsteprate = 1250;
 int steps = 0;
@@ -60,7 +61,7 @@ void loop() {
     break;
     case states::MOVING:
       digitalWrite(step_pin, HIGH);
-      delayMicroseconds(delaytime);
+      delayMicroseconds(pulsetime);
       digitalWrite(step_pin, LOW);
       delayMicroseconds(delaytime); 
       if(direc == HIGH){
@@ -107,7 +108,7 @@ void checkSerial(){
         motorstate = states::MOVE_DISCRETE;
         for(int i = 0; i < ms; i++){    
           digitalWrite(step_pin, HIGH);
-          delayMicroseconds(delaytime);
+          delayMicroseconds(pulsetime);
           digitalWrite(step_pin, LOW);
           delayMicroseconds(delaytime); 
           if(direc == HIGH){

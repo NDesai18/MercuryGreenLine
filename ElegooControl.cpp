@@ -10,9 +10,9 @@ const int upstop_pin = 34;
 const int downstop_pin = 35;
 const int top_LED_pin = 32;
 const int bot_LED_pin = 33;
-const int reset_pin = 1;    //NEED TO CHECK BOARD
+const int reset_pin = 25;   //enables motor functions when high
 
-int delaytime = 600;    //in microseconds
+int delaytime = 900;    //in microseconds
 const int pulsetime = 250;    //in microseconds
 const int mindelaytime = 600;
 int steprate = (pow(10,6))/(delaytime + pulsetime);   //in steps/s
@@ -35,38 +35,47 @@ enum class states{
 states motorstate = states::STATIONARY;
 
 void setup() {
-  attachInterrupt(digitalPinToInterrupt(upstop_pin), stopMotorTop, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(downstop_pin), stopMotorTop, CHANGE);
   pinMode(step_pin, OUTPUT);
   pinMode(direc_pin, OUTPUT);
   pinMode(upstop_pin, INPUT);
   pinMode(downstop_pin, INPUT);
   pinMode(top_LED_pin, OUTPUT);
   pinMode(bot_LED_pin, OUTPUT);
+  pinMode(reset_pin, OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(upstop_pin), stopMotorTop, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(downstop_pin), stopMotorBot, CHANGE);
   digitalWrite(direc_pin, HIGH);    //start with direction set to UP
+  digitalWrite(reset_pin, LOW);    //start with motor disabled
   sc.init();
   sc.setMsgMinLen(1);
   sc.println("Connected to Bouncymotor.ino");
 }
 
 void loop() {
-//  upstop = digitalRead(34);
-//  downstop = digitalRead(35);
+//  upstop = digitalRead(upstop_pin);
+//  downstop = digitalRead(downstop_pin);
+//  sc.println(digitalRead(upstop_pin));
   checkSerial();
+
   
   switch(motorstate){
     case states::STATIONARY:    //do nothing
+      digitalWrite(reset_pin, LOW);
     break;
     case states::ZEROING:
+      digitalWrite(reset_pin, HIGH);
       zeroing();
     break;
     case states::MOVING:    //loops, sending pulses continuously
+      digitalWrite(reset_pin, HIGH);
       pulse();
     break;
     case states::MOVE_DISCRETE:
+      digitalWrite(reset_pin, HIGH);
     break;
   }
 }
+
 
 void checkSerial(){
   if(sc.check()){
@@ -75,7 +84,7 @@ void checkSerial(){
     }
     else if(sc.contains("0")){    //stop
       motorstate = states::STATIONARY;
-      digitalWrite(step_pin, LOW);
+      digitalWrite(reset_pin, LOW);   //disable motor
     }
     else if(sc.contains("1")){    //run continuous
       if(upstop == LOW && direc == HIGH){
@@ -107,8 +116,21 @@ void checkSerial(){
       }
       else{
         motorstate = states::MOVE_DISCRETE;
-        for(int i = 0; i < ms; i++){    
-          pulse();
+        digitalWrite(reset_pin, HIGH);
+        for(int i = 0; i < ms; i++){
+            digitalWrite(step_pin, HIGH);
+            delayMicroseconds(pulsetime);
+            digitalWrite(step_pin, LOW);
+            delayMicroseconds(delaytime); 
+            if(direc == HIGH){
+              steps += -1;
+            }
+            else if(direc == LOW){
+              steps += 1;
+            }
+            if(motorstate == states::STATIONARY){
+              break;
+            }
         }
         motorstate = states::STATIONARY;
       }
@@ -145,7 +167,7 @@ void stopMotorTop(){    //top endstop registers a change
     if(direc == HIGH){    //if moving upward... ie. moving onto the endstop
 //      sc.println("upstop triggered!");              //!!FOR TESTING!!
       motorstate = states::STATIONARY;
-      digitalWrite(step_pin, LOW);    //stop sending pulses
+      digitalWrite(reset_pin, LOW);   //disable motor
       steps = 0; //steps count from the top endstop downward
       upstop = LOW;   //update upstop
       digitalWrite(top_LED_pin, HIGH);    //turn on the top LED
@@ -164,7 +186,7 @@ void stopMotorBot(){    //bot endstop registers a change
     if(direc == LOW){    //if moving downward... ie. moving onto the endstop
 //      sc.println("downstop triggered!");              //!!FOR TESTING!!
       motorstate = states::STATIONARY;
-      digitalWrite(step_pin, LOW);    //stop sending pulses
+      digitalWrite(reset_pin, LOW);   //disable motor
       downstop = LOW;   //update downstop
       digitalWrite(bot_LED_pin, HIGH);    //turn on the bot LED
     }

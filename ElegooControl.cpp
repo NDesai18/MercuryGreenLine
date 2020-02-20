@@ -10,12 +10,13 @@ const int upstop_pin = 34;
 const int downstop_pin = 35;
 const int top_LED_pin = 32;
 const int bot_LED_pin = 33;
+const int reset_pin = 1;    //NEED TO CHECK BOARD
 
 int delaytime = 600;    //in microseconds
-int pulsetime = 250;    //in microseconds
+const int pulsetime = 250;    //in microseconds
 const int mindelaytime = 600;
-int steprate = 1/delaytime;
-const int maxsteprate = 1250;
+int steprate = (pow(10,6))/(delaytime + pulsetime);   //in steps/s
+const int maxsteprate = (pow(10,6))/850;    // in steps/s
 int steps = 0;
 bool direc = HIGH;    //stores direction
 
@@ -26,7 +27,7 @@ MilliTimer DebounceTimer(25);   //in ms
 
 enum class states{
   STATIONARY,
-  ZEROING,
+  ZEROING,    //reset 0 steps at top endstop
   MOVING,    //run continuously
   MOVE_DISCRETE   //move a given number of steps
 };
@@ -57,19 +58,10 @@ void loop() {
     case states::STATIONARY:    //do nothing
     break;
     case states::ZEROING:
-//      zeroing();
+      zeroing();
     break;
-    case states::MOVING:
-      digitalWrite(step_pin, HIGH);
-      delayMicroseconds(pulsetime);
-      digitalWrite(step_pin, LOW);
-      delayMicroseconds(delaytime); 
-      if(direc == HIGH){
-        steps += -1;
-      }
-      else if(direc == LOW){
-        steps += 1;
-      }
+    case states::MOVING:    //loops, sending pulses continuously
+      pulse();
     break;
     case states::MOVE_DISCRETE:
     break;
@@ -96,6 +88,15 @@ void checkSerial(){
         motorstate = states::MOVING;
       }
     }
+    else if(sc.contains("ze")){   //commence zeroing
+      if(upstop == LOW && direc == HIGH){
+        steps = 0;
+        sc.println("Stepcount set to 0");
+      }
+      else{
+        motorstate = states::ZEROING;
+      }
+    }
     else if(sc.contains("ms")){   //move given number of steps
       int ms = sc.toInt16();
       if(upstop == LOW && direc == HIGH){
@@ -107,16 +108,7 @@ void checkSerial(){
       else{
         motorstate = states::MOVE_DISCRETE;
         for(int i = 0; i < ms; i++){    
-          digitalWrite(step_pin, HIGH);
-          delayMicroseconds(pulsetime);
-          digitalWrite(step_pin, LOW);
-          delayMicroseconds(delaytime); 
-          if(direc == HIGH){
-            steps += -1;
-          }
-          else if(direc == LOW){
-            steps += 1;
-          }
+          pulse();
         }
         motorstate = states::STATIONARY;
       }
@@ -141,6 +133,10 @@ void checkSerial(){
         sc.println("Already moving downward!");
       }
     }
+    else if(sc.contains("gp")){   //get position
+      sc.print("Current stepcount is: ");
+      sc.println(steps);
+    }
   }
 }
 
@@ -150,6 +146,7 @@ void stopMotorTop(){    //top endstop registers a change
 //      sc.println("upstop triggered!");              //!!FOR TESTING!!
       motorstate = states::STATIONARY;
       digitalWrite(step_pin, LOW);    //stop sending pulses
+      steps = 0; //steps count from the top endstop downward
       upstop = LOW;   //update upstop
       digitalWrite(top_LED_pin, HIGH);    //turn on the top LED
     }
@@ -178,4 +175,23 @@ void stopMotorBot(){    //bot endstop registers a change
     }
     DebounceTimer.reset();
   }
+}
+
+void pulse(){
+  digitalWrite(step_pin, HIGH);
+  delayMicroseconds(pulsetime);
+  digitalWrite(step_pin, LOW);
+  delayMicroseconds(delaytime); 
+  if(direc == HIGH){
+    steps += -1;
+  }
+  else if(direc == LOW){
+    steps += 1;
+  }
+}
+
+void zeroing(){   //runs the motor upward into the endstop, where it calibrates steps to 0
+  digitalWrite(direc_pin, HIGH);
+  direc = HIGH;
+  pulse();
 }

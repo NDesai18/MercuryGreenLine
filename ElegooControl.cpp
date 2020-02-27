@@ -1,5 +1,7 @@
 #include "SerialChecker.h"
 #include "MilliTimer.h"
+#include "MCP3208.h"
+
 
 SerialChecker sc(Serial);
 
@@ -10,8 +12,13 @@ const int upstop_pin = 34;
 const int downstop_pin = 35;
 const int top_LED_pin = 32;
 const int bot_LED_pin = 33;
-const int reset_pin = 25;   //enables motor functions when high
+const int reset_pin = 25; //enables motor functions when high
 
+//Initialise ADC?
+MCP3208 adc(5);
+const int scan_pot_chan = 0;
+
+//Useful constants
 int delaytime = 900;    //in microseconds
 const int pulsetime = 250;    //in microseconds
 const int mindelaytime = 600;
@@ -19,10 +26,12 @@ int steprate = (pow(10,6))/(delaytime + pulsetime);   //in steps/s
 const int maxsteprate = (pow(10,6))/850;    // in steps/s
 int steps = 0;
 bool direc = HIGH;    //stores direction
-
 bool upstop = HIGH;   //LOW corresponds to the switch being pressed
 bool downstop = HIGH;
-
+float scanPotV = 0.0; // Initialises measured potentiometer voltage to 0.0
+const int timeStep = 100;
+float floatPotV = 0.0;
+MilliTimer dataTimer(timeStep);
 MilliTimer DebounceTimer(25);   //in ms
 
 enum class states{
@@ -46,6 +55,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(downstop_pin), stopMotorBot, CHANGE);
   digitalWrite(direc_pin, HIGH);    //start with direction set to UP
   digitalWrite(reset_pin, LOW);    //start with motor disabled
+  adc.begin();
   sc.init();
   sc.setMsgMinLen(1);
   sc.println("Connected to Bouncymotor.ino");
@@ -56,6 +66,7 @@ void loop() {
 //  downstop = digitalRead(downstop_pin);
 //  sc.println(digitalRead(upstop_pin));
   checkSerial();
+  readAnalogInputs();
 
   
   switch(motorstate){
@@ -216,4 +227,22 @@ void zeroing(){   //runs the motor upward into the endstop, where it calibrates 
   digitalWrite(direc_pin, HIGH);
   direc = HIGH;
   pulse();
+}
+
+void readAnalogInputs(){
+    static int32_t potV = 0;
+    static int32_t nsamples = 0;
+    if(!dataTimer.timedOut(true) || nsamples == 0){
+      potV += adc.read(scan_pot_chan);
+      nsamples++;
+    }
+    else{
+      if(nsamples){
+        potV /= nsamples;
+      }
+      floatPotV = 5 * float(potV) / 4095.0;
+      potV = 0;
+      nsamples = 0;
+      sc.println(floatPotV);
+    }
 }

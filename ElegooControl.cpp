@@ -25,6 +25,7 @@ const int mindelaytime = 600;
 int steprate = (pow(10,6))/(delaytime + pulsetime);   //in steps/s
 const int maxsteprate = (pow(10,6))/850;    // in steps/s
 int steps = 0;
+float distance = 0.0;
 bool direc = HIGH;    //stores direction
 bool upstop = HIGH;   //LOW corresponds to the switch being pressed
 bool downstop = HIGH;
@@ -109,16 +110,11 @@ void checkSerial(){
       }
     }
     else if(sc.contains("ze")){   //commence zeroing
-      if(upstop == LOW && direc == HIGH){
-        steps = 0;
-        sc.println("Stepcount set to 0");
-      }
-      else{
-        motorstate = states::ZEROING;
-      }
+      sc.println("Commencing Zeroing...");
+      motorstate = states::ZEROING;
     }
     else if(sc.contains("ms")){   //move given number of steps
-      int ms = sc.toInt16();
+      int ms = sc.toInt32();
       if(upstop == LOW && direc == HIGH){
         sc.println("Cannot move further up! Please change directions!");
       }
@@ -126,22 +122,27 @@ void checkSerial(){
         sc.println("Cannot move further down! Please change directions!");
       }
       else{
+        sc.println(ms);
         motorstate = states::MOVE_DISCRETE;
         digitalWrite(reset_pin, HIGH);
         for(int i = 0; i < ms; i++){
-            digitalWrite(step_pin, HIGH);
-            delayMicroseconds(pulsetime);
-            digitalWrite(step_pin, LOW);
-            delayMicroseconds(delaytime); 
-            if(direc == HIGH){
-              steps += -1;
-            }
-            else if(direc == LOW){
-              steps += 1;
-            }
-            if(motorstate == states::STATIONARY){
-              break;
-            }
+          digitalWrite(step_pin, HIGH);
+          delayMicroseconds(pulsetime);
+          digitalWrite(step_pin, LOW);
+          delayMicroseconds(delaytime); 
+          if(direc == HIGH){
+            steps += -1;
+          }
+          else if(direc == LOW){
+            steps += 1;
+          }
+          if(motorstate == states::STATIONARY){
+            break;
+          }
+          if(sc.check()){
+            sc.println("Cancelled move steps.");
+            break;
+          }
         }
         motorstate = states::STATIONARY;
       }
@@ -167,8 +168,12 @@ void checkSerial(){
       }
     }
     else if(sc.contains("gp")){   //get position
+      distance = steps*7.98/20000;   //in mm
       sc.print("Current stepcount is: ");
       sc.println(steps);
+      sc.print("Current position is: ");
+      sc.print(distance);
+      sc.println("mm");
     }
   }
 }
@@ -180,6 +185,7 @@ void stopMotorTop(){    //top endstop registers a change
       motorstate = states::STATIONARY;
       digitalWrite(reset_pin, LOW);   //disable motor
       steps = 0; //steps count from the top endstop downward
+      sc.println("Stepcount set to 0");
       upstop = LOW;   //update upstop
       digitalWrite(top_LED_pin, HIGH);    //turn on the top LED
     }
@@ -224,9 +230,16 @@ void pulse(){
 }
 
 void zeroing(){   //runs the motor upward into the endstop, where it calibrates steps to 0
-  digitalWrite(direc_pin, HIGH);
-  direc = HIGH;
-  pulse();
+  if(upstop == LOW){
+    steps = 0;
+    sc.println("Stepcount set to 0");
+    motorstate = states::STATIONARY;
+  }
+  else{
+    digitalWrite(direc_pin, HIGH);
+    direc = HIGH;
+    pulse();
+  }
 }
 
 void readAnalogInputs(){
@@ -243,6 +256,6 @@ void readAnalogInputs(){
       floatPotV = 5 * float(potV) / 4095.0;
       potV = 0;
       nsamples = 0;
-      sc.println(floatPotV);
+//      sc.println(floatPotV);
     }
 }

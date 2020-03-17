@@ -25,6 +25,8 @@ const int mindelaytime = 600;
 int steprate = (pow(10,6))/(delaytime + pulsetime);   //in steps/s
 const int maxsteprate = (pow(10,6))/850;    // in steps/s
 int steps = 0;
+int stepold = 0;
+int ms = 0;
 float distance = 0.0;
 bool direc = HIGH;    //stores direction
 bool upstop = HIGH;   //LOW corresponds to the switch being pressed
@@ -34,6 +36,7 @@ const int timeStep = 100;
 float floatPotV = 0.0;
 MilliTimer dataTimer(timeStep);
 MilliTimer DebounceTimer(25);   //in ms
+bool move_discrete = false;
 
 enum class states{
   STATIONARY,
@@ -47,8 +50,8 @@ states motorstate = states::STATIONARY;
 void setup() {
   pinMode(step_pin, OUTPUT);
   pinMode(direc_pin, OUTPUT);
-  pinMode(upstop_pin, INPUT);
-  pinMode(downstop_pin, INPUT);
+  pinMode(upstop_pin, INPUT_PULLUP);
+  pinMode(downstop_pin, INPUT_PULLUP);
   pinMode(top_LED_pin, OUTPUT);
   pinMode(bot_LED_pin, OUTPUT);
   pinMode(reset_pin, OUTPUT);
@@ -63,9 +66,6 @@ void setup() {
 }
 
 void loop() {
-//  upstop = digitalRead(upstop_pin);
-//  downstop = digitalRead(downstop_pin);
-//  sc.println(digitalRead(upstop_pin));
   checkSerial();
   readAnalogInputs();
 
@@ -79,11 +79,18 @@ void loop() {
       zeroing();
     break;
     case states::MOVING:    //loops, sending pulses continuously
+    if(!move_discrete){
       digitalWrite(reset_pin, HIGH);
       pulse();
-    break;
-    case states::MOVE_DISCRETE:
+    }
+    else if(move_discrete){
       digitalWrite(reset_pin, HIGH);
+      pulse();
+      if(abs(steps-stepold)>=ms){
+        move_discrete = false;
+        motorstate = states::STATIONARY;
+       }
+    }  
     break;
   }
 }
@@ -114,7 +121,7 @@ void checkSerial(){
       motorstate = states::ZEROING;
     }
     else if(sc.contains("ms")){   //move given number of steps
-      int ms = sc.toInt32();
+      ms = sc.toInt32();
       if(upstop == LOW && direc == HIGH){
         sc.println("Cannot move further up! Please change directions!");
       }
@@ -122,29 +129,9 @@ void checkSerial(){
         sc.println("Cannot move further down! Please change directions!");
       }
       else{
-        sc.println(ms);
-        motorstate = states::MOVE_DISCRETE;
-        digitalWrite(reset_pin, HIGH);
-        for(int i = 0; i < ms; i++){
-          digitalWrite(step_pin, HIGH);
-          delayMicroseconds(pulsetime);
-          digitalWrite(step_pin, LOW);
-          delayMicroseconds(delaytime); 
-          if(direc == HIGH){
-            steps += -1;
-          }
-          else if(direc == LOW){
-            steps += 1;
-          }
-          if(motorstate == states::STATIONARY){
-            break;
-          }
-          if(sc.check()){
-            sc.println("Cancelled move steps.");
-            break;
-          }
-        }
-        motorstate = states::STATIONARY;
+        stepold = steps;
+        move_discrete = true;
+        motorstate = states::MOVING;
       }
     }
     else if(sc.contains("su")){   //set direc to up
@@ -256,6 +243,6 @@ void readAnalogInputs(){
       floatPotV = 5 * float(potV) / 4095.0;
       potV = 0;
       nsamples = 0;
-//      sc.println(floatPotV);
+      sc.println(floatPotV);
     }
 }
